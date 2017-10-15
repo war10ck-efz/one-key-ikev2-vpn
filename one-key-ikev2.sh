@@ -166,7 +166,7 @@ function yum_install(){
 	yum -y install pam-devel openssl-devel make gcc
 	else
 	apt-get -y update
-	apt-get -y install libpam0g-dev libssl-dev make gcc
+	apt-get -y install libpam0g-dev libssl-dev make gcc libgmp-dev
 	fi
 }
 
