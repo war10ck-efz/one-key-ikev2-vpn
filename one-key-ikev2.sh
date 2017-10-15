@@ -2,18 +2,20 @@
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
 #===============================================================================================
-#   System Required:  CentOS6.x (32bit/64bit) or Ubuntu
-#   Description:  Install IKEV2 VPN for CentOS and Ubuntu
+#   System Required:  CentOS6.x (32bit/64bit) or Ubuntu or Debian
+#   Description:  Install IKEV2 VPN for CentOS and Ubuntu and Debian
 #   Author: quericy
+#	Update: war10ck
 #   Intro:  http://quericy.me/blog/699
 #===============================================================================================
 
 clear
 echo "#############################################################"
-echo "# Install IKEV2 VPN for CentOS6.x (32bit/64bit) or Ubuntu"
+echo "# Install IKEV2 VPN for CentOS6.x (32bit/64bit) or Ubuntu or Debian"
 echo "# Intro: http://quericy.me/blog/699"
 echo "#"
 echo "# Author:quericy"
+echo "# Update:war10ck"
 echo "#"
 echo "#############################################################"
 echo ""
@@ -76,8 +78,14 @@ function get_system(){
 		then
 			system_str="1"
 		else
-			echo "This Script must be running at the CentOS or Ubuntu!"
-			exit 1
+			echo "$get_system_str" |grep -q "Debian"
+			if [ $? -eq 0 ]
+			then
+				system_str="1"
+			else
+				echo "This Script must be running at the CentOS or Ubuntu or Debian!"
+				exit 1
+			fi
 		fi
 	fi
 	
@@ -90,6 +98,7 @@ function pre_install(){
 	echo "# Intro: http://quericy.me/blog/699"
 	echo "#"
 	echo "# Author:quericy"
+	echo "# Update:war10ck"
 	echo "#"
 	echo "#############################################################"
 	echo ""
@@ -257,61 +266,44 @@ function get_key(){
 function configure_ipsec(){
  cat > /usr/local/etc/ipsec.conf<<-EOF
 config setup
-    uniqueids=never 
+    uniqueids=never              #允许多个客户端使用同一个证书
 
-conn iOS_cert
-    keyexchange=ikev1
-    fragmentation=yes
-    left=%defaultroute
-    leftauth=pubkey
-    leftsubnet=0.0.0.0/0
-    leftcert=server.cert.pem
-    right=%any
-    rightauth=pubkey
-    rightauth2=xauth
-    rightsourceip=10.31.2.0/24
-    rightcert=client.cert.pem
-    auto=add
+#所有项目共用的配置项
+conn %default
+    keyexchange=ike              #ikev1 或 ikev2 都用这个
+    left=%any                    #服务器端标识,%any表示任意
+    leftsubnet=0.0.0.0/0         #服务器端虚拟ip, 0.0.0.0/0表示通配.
+    right=%any                   #客户端标识,%any表示任意
 
-conn android_xauth_psk
-    keyexchange=ikev1
-    left=%defaultroute
-    leftauth=psk
-    leftsubnet=0.0.0.0/0
-    right=%any
-    rightauth=psk
-    rightauth2=xauth
-    rightsourceip=10.31.2.0/24
-    auto=add
+conn IKE-BASE
+    leftca=ca.cert.pem           #服务器端 CA 证书
+    leftcert=server.cert.pem     #服务器端证书
+    rightsourceip=10.31.2.0/24    #分配给客户端的虚拟 ip 段
 
-conn networkmanager-strongswan
+conn IKEv2-EAP
+    also=IKE-BASE
     keyexchange=ikev2
-    left=%defaultroute
+    ike = aes256-sha256-modp1024,3des-sha1-modp1024,aes256-sha1-modp1024!
+    esp = aes256-sha256,3des-sha1,aes256-sha1!
+    rekey=no                     #服务器对 Windows 发出 rekey 请求会断开连接
+    leftid=
     leftauth=pubkey
-    leftsubnet=0.0.0.0/0
-    leftcert=server.cert.pem
+    leftsendcert=always
+    #leftfirewall=yes
     right=%any
-    rightauth=pubkey
-    rightsourceip=10.31.2.0/24
-    rightcert=client.cert.pem
-    auto=add
-
-conn windows7
-    keyexchange=ikev2
-    ike=aes256-sha1-modp1024!
-    rekey=no
-    left=%defaultroute
-    leftauth=pubkey
-    leftsubnet=0.0.0.0/0
-    leftcert=server.cert.pem
-    right=%any
-    rightauth=eap-mschapv2
+    rightfirewall=yes
     rightsourceip=10.31.2.0/24
     rightsendcert=never
+    #rightauth=eap-radius
+    rightauth=eap-mschapv2
     eap_identity=%any
+    dpdaction=clear
+    fragmentation=yes
     auto=add
 
 EOF
+
+sed -i 's/leftid=.*/&'"$IP"'/' /usr/local/etc/ipsec.conf
 }
 
 # configure the strongswan.conf
